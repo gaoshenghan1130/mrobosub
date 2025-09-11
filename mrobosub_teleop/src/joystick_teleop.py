@@ -6,17 +6,25 @@ from sensor_msgs.msg import Joy
 from std_msgs.msg import Header, Float64
 from std_srvs.srv import Trigger
 from typing import Callable, Dict, Union
-from enum import Enum, auto
+from enum import Enum, auto, IntEnum
 
 from mrobosub_lib.lib import Node, Param
 
+# recurive type is smart but annoying to use
 config = Dict[str, Union[int, bool, 'config']]
+
+AXIS_SURGE  = 1 << 0  
+AXIS_SWAY   = 1 << 1  
+AXIS_HEAVE  = 1 << 2
+AXIS_YAW    = 1 << 3
+AXIS_ROLL   = 1 << 4
+AXIS_PITCH  = 1 << 5
 
 AXES = 'surge', 'sway', 'heave', 'yaw', 'roll', 'pitch'
 
-class ControlMode(Enum):
-    Twist = auto()
-    Pose = auto()
+class ControlMode(IntEnum):
+    Twist = 0b01
+    Pose  = 0b10
 
 class ButtonTrigger:
     """ Class for edge detection on button presses, able to detect rising, falling, and dual edges and can be called repeatedly."""
@@ -40,13 +48,14 @@ class ButtonTrigger:
     def falling_edge(self) -> bool:
         return self._edge(lambda current, last: not current and last)
 
+# should be replaced with a function later
 class ModulusRange:
     def __init__(self, lower: float, upper: float) -> None:
         self.lower = lower
         self.upper = upper
 
     def __call__(self, value: float) -> float:
-        """Ensures value is between lower and upper while preserving mod"""
+        """Ensures value is between lower and upper while preserving mod with diff"""
         diff = self.upper - self.lower
         value = value % diff
         low_offset = self.lower % diff
@@ -55,6 +64,7 @@ class ModulusRange:
         low_count = self.lower // diff
         return low_count * diff + value
 
+# may be hash is better? more intuitive, or separate axis funcs to 3?
 class Inputs:
     def __init__(self):
         self.axes = []
@@ -356,6 +366,7 @@ class JoystickTeleop(Node):
         self.axis_controls['yaw'] = YawControl(self.inputs, self.yaw)
         self.axis_controls['roll'] = RollControl(self.inputs, self.roll)
         self.axis_controls['pitch'] = PitchControl(self.inputs, self.pitch)
+        # copied, could be done better
         self.periodic_funcs.update(self.axis_controls)
 
         self.wrench_pubs = [rospy.Publisher(f'/output_wrench/{axis}', Float64, queue_size=1) for axis in AXES]
@@ -436,6 +447,7 @@ class JoystickTeleop(Node):
             print(f'Unable to zero state estimator ({exc})')
 
     def run(self):
+    # stop should be interpreted as hard stop, not soft stop
         rate = rospy.Rate(self.update_rate)
         while not rospy.is_shutdown():
             if self.stop:
