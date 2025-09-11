@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import typing
 import rospy
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Header, Float64
@@ -18,20 +19,26 @@ class ControlMode(Enum):
     Pose = auto()
 
 class ButtonTrigger:
+    """ Class for edge detection on button presses, able to detect rising, falling, and dual edges and can be called repeatedly."""
     def __init__(self, trigger: Callable[[], bool]) -> None:
         self.trigger = trigger
         self.last = self.trigger()
 
+    def _edge(self, condition: Callable[[bool, bool], bool]) -> bool:
+        """PRIVATE: for edge detection"""
+        current = self.trigger()
+        result = condition(current, self.last)
+        self.last = current
+        return result
+
     def dual_edge(self) -> bool:
-        """Should only be called once per period"""
-        if self.trigger() != self.last:
-            self.last = not self.last
-            return True
-        return False
+        return self._edge(lambda current, last: current != last)
 
     def rising_edge(self) -> bool:
-        """Should only be called once per period"""
-        return self.dual_edge() and self.last
+        return self._edge(lambda current, last: current and not last)
+
+    def falling_edge(self) -> bool:
+        return self._edge(lambda current, last: not current and last)
 
 class ModulusRange:
     def __init__(self, lower: float, upper: float) -> None:
@@ -72,7 +79,7 @@ class DOF:
         self.twist_pub = rospy.Publisher(twist_pub, Float64, queue_size=1)
 
     def get_twist_input(self) -> float:
-        config = self.config['twist']
+        config = typing.cast(dict, self.config['twist']) 
         output = 0
         if 'axis' in config:
             value = self.inputs.get_axis(config['axis']['id'])
@@ -90,7 +97,7 @@ class DOF:
         return output
 
     def pose_delta_factory(self) -> Callable[[], float]:
-        config = self.config['pose']
+        config = typing.cast(dict, self.config['pose'])
 
         if 'axis' in config:
             axis_id = config['axis']['id']
