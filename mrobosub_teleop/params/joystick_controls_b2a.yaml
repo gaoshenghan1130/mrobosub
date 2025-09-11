@@ -1,0 +1,21 @@
+axes:
+  0:
+    use: sway
+    scale: -1
+  1:
+    use: surge
+  2:
+    use: yaw
+    scale: -0.2
+  4:
+    use: roll
+    scale: -0.2
+  5:
+    use: pitch
+    scale: 0.2
+
+buttons:
+  7:
+    use: heave.toggle
+  9:
+    use: estop
