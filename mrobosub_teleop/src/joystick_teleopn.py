@@ -1,23 +1,12 @@
 #!/usr/bin/env python
 
-from calendar import c
 from enum import Enum
-import string
-from tokenize import String
-from typing import List, cast
-
-from matplotlib import axis, scale
-from matplotlib.pyplot import flag
-from numpy import rate
+from typing import List
 import rospy
 from sensor_msgs.msg import Joy
-from std_msgs.msg import Header, Float64
-from std_srvs.srv import Trigger
-from typing import Callable, Dict, Union, Tuple
-from time import sleep
-from mrobosub_lib.lib import Node, Param
-
-AXES = ['sway', 'surge', 'heave', 'yaw', 'roll', 'pitch']
+from std_msgs.msg import Float64
+from typing import Dict, Union, Tuple
+from mrobosub_lib.lib import Node
 
 class ButtonCommand(int, Enum):
     INCREASE = 1
@@ -25,7 +14,7 @@ class ButtonCommand(int, Enum):
     TOGGLE = 0
 
 class Button:
-    """ Store commands tied to buttons """
+    """Store commands tied to buttons"""
     def __init__(self, idx : int, commandstr : str) -> None:
         self.idx = idx
         self.commandstr = commandstr
@@ -65,22 +54,32 @@ class Button:
         return self.name, self._action
    
 class DOF:
-    """ Store state of a degree of freedom """
+    """Store state of a degree of freedom"""
     class DOFState(int, Enum):
         POSE = 0 
         TWIST = 1
     
-    def __init__(self, id : int, name : str, scale : float) -> None:
+    def __init__(self, id : int, name : str, scale : float, istoggleable : bool) -> None:
         self.idx = id
         self.name = name
         self.state = DOF.DOFState.POSE
         self.scale = scale
+        self.istogglable = istoggleable
+        self.setPoint = 0.0 # target position
         
-    def update(self, command : ButtonCommand, scale : float) -> float:
-        """ Command is decided by button press, scale is from axis """
-        self.state ^= int(not bool(abs(command))) # toggle if command is TOGGLE
+        self.twist_pub = rospy.Publisher(f'/target_twist/{name}', Float64, queue_size=1)
+        self.pose_pub = rospy.Publisher(f'/target_pose/{name}', Float64, queue_size=1)
+        
+    def update(self, command : ButtonCommand, scale : float) -> None:
+        self.state ^= int(not bool(abs(command) and self.istogglable)) # toggle if command is TOGGLE && istoggleable
         self.scale = scale * command
-        return self.scale
+        self.setPoint += self.scale * (1 - self.state)
+        
+    def publish(self) -> None:
+        if self.state == DOF.DOFState.POSE:
+            self.pose_pub.publish(Float64(self.setPoint))
+        elif self.state == DOF.DOFState.TWIST:
+            self.twist_pub.publish(Float64(self.scale))
 
 class Joystick_teleopn(Node):
     """
@@ -109,22 +108,26 @@ class Joystick_teleopn(Node):
     """
     axes : Dict[str, Dict[str, Union[str,float]]]
     buttons : Dict[str, Dict[str, str]]
-    rate : float # Hz
+    rate : rospy.Rate # Hz
     
     def __init__(self) -> None:
         super().__init__("joystick_teleopn")
         self.input_subscriber = rospy.Subscriber("/joy", Joy, self.joystick_callback)
-        self.wrench_pubs = [rospy.Publisher(f'/output_wrench/{axis}', Float64, queue_size=1) for axis in AXES]
-        # Globals:
+        self.wrench_pubs = [rospy.Publisher(f'/output_wrench/{axis}', Float64, queue_size=1) 
+                            for axis in ['sway', 'surge', 'heave', 'yaw', 'roll', 'pitch']]
+        # Globals
         self.buttonsInstance : List[Button] = []
         self.DOFInstance : Dict[str, DOF] = {}
         self.stateMachineMode = False
+        self.loopRate : rospy.Rate = rospy.Rate(50) # default
         
     def init(self) -> None:
+        self.loopRate = rospy.Rate(self.rate)
         for i in range(6):
             if (DOFConfig := self.axes.get(str(i))):
                 name = str(DOFConfig['use'])
-                self.DOFInstance[name]= DOF(i, name, float(DOFConfig['scale']))
+                self.DOFInstance[name]= DOF(i, name, float(DOFConfig['scale']), 
+                                                           name in [ "yaw", "heave", "roll", "pitch"]) # toggleable DOFs
             else:
                 raise ValueError(f"Axis {i} not configured in params")
         for i in range(10):
@@ -158,9 +161,12 @@ class Joystick_teleopn(Node):
     def run(self):
         self.init() # load globals
         while not rospy.is_shutdown():
-            
-            sleep(1/self.rate)
-        return 0
+            if not self.stateMachineMode:
+                for dof in self.DOFInstance.values():
+                    dof.publish()
+            else:
+                self.hard_stop()
+            self.loopRate.sleep()
             
 if __name__ == "__main__":
     Joystick_teleopn().run()

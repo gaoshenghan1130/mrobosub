@@ -1,6 +1,5 @@
 <launch>
   <node name="joystick_teleopn" pkg="mrobosub_teleop" type="joystick_teleopn.py" required="true" output="screen">
-    <rosparam command="delete" param="/joystick_teleopn/" />
     <rosparam command="load" file="$(find mrobosub_teleop)/params/joystick_controls_b2a.yaml" />
   </node>
   <node name="joy_node" pkg="joy" type="joy_node"/>
