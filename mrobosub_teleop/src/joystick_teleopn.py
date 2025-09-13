@@ -2,8 +2,6 @@
 
 from enum import Enum
 from typing import List
-
-from matplotlib.pyplot import flag
 import rospy
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Float64
@@ -85,8 +83,8 @@ class DOF:
         
     def update(self, command : ButtonCommand, scale : float) -> None:
         self.state ^= int(not bool(abs(command) and self.istogglable)) # toggle if command is TOGGLE && istoggleable
-        self.scale = (self.scale_t * self.state + self.scale_p * (1 - self.state)) * scale
-        self.setPoint = self.pos + self.scale_p * (1 - self.state) * scale # only update setPoint in POSE mode
+        self.scale = (self.scale_t * self.state + self.scale_p * (1 - self.state)) * scale # set scale based on state
+        self.setPoint = self.pos + self.scale_p * scale
         
     def publish(self) -> None:
         if self.state == DOF.DOFState.POSE:
