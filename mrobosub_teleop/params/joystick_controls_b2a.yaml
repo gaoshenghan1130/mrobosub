@@ -1,21 +1,51 @@
+# Tie axis numbers to commands
 axes:
-  0:
+  "0":
     use: sway
     scale: -1
-  1:
+  "1":
     use: surge
-  2:
+    scale: 1
+  "2":
     use: yaw
     scale: -0.2
-  4:
+  "3":
+    use: heave
+    scale: -0.2
+  "4":
     use: roll
     scale: -0.2
-  5:
+  "5":
     use: pitch
     scale: 0.2
 
+# Tie button numbers to commands
 buttons:
-  7:
+  "0":
+    use: yaw.increase
+    scale: 30
+  "1":
+    use: heave.decrease
+    scale: -0.2
+  "2":
+    use: heave.increase
+    scale: 0.2
+  "3":
+    use: yaw.decrease
+    scale: -30
+  "4":
+    use: roll.toggle
+  "5":
+    use: pitch.toggle
+  "6":
+    use: yaw.toggle
+  "7":
     use: heave.toggle
-  9:
-    use: estop
+  # Special commands
+  "8":
+    use: com.switch # between state machine mode
+  "9":
+    use: com.estop
+
+# Rate to send commands at (Hz)
+rate: 50
