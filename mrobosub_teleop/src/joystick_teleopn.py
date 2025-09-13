@@ -2,6 +2,8 @@
 
 from enum import Enum
 from typing import List
+
+from matplotlib.pyplot import flag
 import rospy
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Float64
@@ -59,21 +61,32 @@ class DOF:
         POSE = 0 
         TWIST = 1
     
-    def __init__(self, id : int, name : str, scale : float, istoggleable : bool) -> None:
+    def __init__(self, id : int, name : str, scale_t : float, scale_p : float, istoggleable : bool) -> None:
         self.idx = id
         self.name = name
-        self.state = DOF.DOFState.POSE
-        self.scale = scale
-        self.istogglable = istoggleable
+        
+        ## state variables
+        self.pos = 0.0 # current position
+        self.state = DOF.DOFState.TWIST
+        self.scale = 0.0 # current scale
         self.setPoint = 0.0 # target position
         
+        ## configs
+        self.scale_t = scale_t
+        self.scale_p = scale_p
+        self.istogglable = istoggleable
+
         self.twist_pub = rospy.Publisher(f'/target_twist/{name}', Float64, queue_size=1)
         self.pose_pub = rospy.Publisher(f'/target_pose/{name}', Float64, queue_size=1)
+        self.pose_sub = rospy.Subscriber(f'/pose/{name}', Float64, self.pose_callback)
+        
+    def pose_callback(self, msg : Float64) -> None:
+            self.pos = msg.data
         
     def update(self, command : ButtonCommand, scale : float) -> None:
         self.state ^= int(not bool(abs(command) and self.istogglable)) # toggle if command is TOGGLE && istoggleable
-        self.scale = scale * command
-        self.setPoint += self.scale * (1 - self.state)
+        self.scale = (self.scale_t * self.state + self.scale_p * (1 - self.state)) * scale
+        self.setPoint = self.pos + self.scale_p * (1 - self.state) * scale # only update setPoint in POSE mode
         
     def publish(self) -> None:
         if self.state == DOF.DOFState.POSE:
@@ -105,6 +118,8 @@ class Joystick_teleopn(Node):
     - /joy
     - /pose/heave
     - /pose/yaw
+    - /pose/roll
+    - /pose/pitch
     """
     axes : Dict[str, Dict[str, Union[str,float]]]
     buttons : Dict[str, Dict[str, str]]
@@ -126,7 +141,7 @@ class Joystick_teleopn(Node):
         for i in range(6):
             if (DOFConfig := self.axes.get(str(i))):
                 name = str(DOFConfig['use'])
-                self.DOFInstance[name]= DOF(i, name, float(DOFConfig['scale']), 
+                self.DOFInstance[name]= DOF(i, name, float(DOFConfig['scale_t']), float(DOFConfig['scale_p']),
                                                            name in [ "yaw", "heave", "roll", "pitch"]) # toggleable DOFs
             else:
                 raise ValueError(f"Axis {i} not configured in params")

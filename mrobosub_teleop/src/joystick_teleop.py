@@ -340,7 +340,6 @@ class JoystickTeleop(Node):
     def __init__(self) -> None:
         super().__init__("joystick_teleop")
         self.input_subscriber = rospy.Subscriber("/joy", Joy, self.joystick_callback)
-
         self.inputs = Inputs()
         self.pose = {'heave': 0}
 
